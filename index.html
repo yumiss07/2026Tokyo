@@ -80,14 +80,14 @@ button{cursor:pointer}
 .passwrap{position:sticky;top:env(safe-area-inset-top,0px);z-index:8;background:var(--bg);
   margin-left:calc(-1 * max(16px, env(safe-area-inset-left,0px)));margin-right:calc(-1 * max(16px, env(safe-area-inset-right,0px)));
   padding-left:max(16px, env(safe-area-inset-left,0px));padding-right:max(16px, env(safe-area-inset-right,0px));padding-block:0 4px;margin-top:-16px;padding-top:16px;transition:padding .25s ease}
-.pass-top,.pass .trip-name,.pass .dest{transition:padding .25s ease,font-size .25s ease,margin .25s ease}
+.pass-top,.pass .trip-name,.pass .dest,.pass .dates{transition:padding .25s ease,font-size .25s ease,margin .25s ease}
 .pass .perf,.pass .pass-bot{transition:max-height .25s ease,padding .25s ease,opacity .2s ease,margin .25s ease;max-height:90px;overflow:visible}
 .passwrap.shrunk{padding-top:8px}
-.passwrap.shrunk .pass-top{padding:10px 16px}
 .passwrap.shrunk .trip-name{font-size:18px;margin:0}
 .passwrap.shrunk .dest{font-size:12px;margin-top:0}
-.passwrap.shrunk .perf{max-height:0;opacity:0;border-top-width:0;margin-block:0}
-.passwrap.shrunk .pass-bot{max-height:0;opacity:0;padding-block:0;overflow:hidden}
+.passwrap.shrunk .pass-top{padding:10px 16px 8px}
+.passwrap.shrunk .pass-bot{padding:7px 16px 9px}
+.passwrap.shrunk .dates{font-size:12px}
 @media (prefers-reduced-motion:reduce){.passwrap,.pass-top,.pass .trip-name,.pass .dest,.pass .perf,.pass .pass-bot{transition:none}}
 .panel-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:10px}
 .panel-head h2{font-family:var(--f-display);font-size:19px;margin:0}
@@ -123,6 +123,12 @@ button{cursor:pointer}
 .stop h3{margin:0;font-family:var(--f-display);font-size:17px;font-weight:700;word-break:break-word}
 .stop .place{color:var(--muted);font-size:13px;margin-top:2px;word-break:break-word}
 .stop .navto,.planb .navto{font-size:12px;color:var(--muted);margin-top:6px;word-break:break-all}
+.tpick{display:flex;align-items:center;gap:4px;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:0 6px 0 4px;position:relative}
+.tpick:focus-within{border-color:var(--accent)}
+.tpick input.th,.tpick input.tm{width:2.6em;border:0;background:none;text-align:center;padding:10px 2px;font-family:var(--f-mono);font-size:17px;font-variant-numeric:tabular-nums}
+.tpick input:focus{outline:none;background:var(--accent-soft);border-radius:6px}
+.tpick .colon{font-size:17px;color:var(--muted)}
+.tpick .tclear{margin-left:auto;border:0;background:none;color:var(--muted);font-size:18px;padding:4px 6px;line-height:1}
 .hint{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.45}
 .stop .note{font-size:13px;margin-top:6px;white-space:pre-wrap;word-break:break-word}
 .row-actions{display:flex;gap:14px;margin-top:8px;flex-wrap:wrap}
@@ -576,6 +582,30 @@ async function compress(file){
     return out;
   }finally{URL.revokeObjectURL(url)}
 }
+/* 自訂時間輸入：時、分可以直接打數字，分預設 00 */
+function timeBox(id,name,val,label){
+  const [h,m]=(val||"").split(":");
+  return `<div class="tpick" data-tpick><input id="${id}" class="th" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" placeholder="時" value="${esc(h||"")}" aria-label="${label}（時）" autocomplete="off"><span class="colon">:</span><input id="${id}-m" class="tm" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" placeholder="分" value="${esc(m||(h?"":"00"))}" aria-label="${label}（分）" autocomplete="off"><input type="hidden" name="${name}" value="${esc(val||"")}"><button type="button" class="tclear" aria-label="清除${label}" ${val?"":"hidden"}>×</button></div>`;
+}
+function initTimeBoxes(f){
+  f.querySelectorAll("[data-tpick]").forEach(box=>{
+    const h=box.querySelector(".th"),m=box.querySelector(".tm"),hid=box.querySelector("input[type=hidden]"),clr=box.querySelector(".tclear");
+    const digits=el=>el.value.replace(/\D/g,"").slice(0,2);
+    const sync=()=>{
+      const hv=digits(h),mv=digits(m);
+      if(hv===""){hid.value="";clr.hidden=true;return}
+      const hh=Math.min(23,+hv),mm=Math.min(59,+(mv||0));
+      hid.value=String(hh).padStart(2,"0")+":"+String(mm).padStart(2,"0");clr.hidden=false;
+    };
+    h.addEventListener("focus",()=>h.select());m.addEventListener("focus",()=>m.select());
+    h.addEventListener("input",()=>{h.value=digits(h);if(!m.value)m.value="00";if(h.value.length===2||+h.value>2){m.focus()}sync()});
+    m.addEventListener("input",()=>{m.value=digits(m);sync()});
+    h.addEventListener("blur",()=>{if(h.value!==""){h.value=String(Math.min(23,+h.value)).padStart(2,"0")}sync()});
+    m.addEventListener("blur",()=>{m.value=m.value===""?"00":String(Math.min(59,+m.value)).padStart(2,"0");sync()});
+    m.addEventListener("keydown",e=>{if(e.key==="Backspace"&&m.value===""){e.preventDefault();h.focus()}});
+    clr.addEventListener("click",()=>{h.value="";m.value="00";sync();h.focus()});
+  });
+}
 function editStop(id){
   const s=id?S.stops[id]:{day};
   const keep=[...(s.photos||[])], removed=[], pending=[];
@@ -585,7 +615,7 @@ function editStop(id){
   };
   sheet(id?"編輯行程":"新增行程",`
     <div class="field"><label for="s-day">哪一天</label><select id="s-day" name="day">${dayOptions(s.day||day)}</select></div>
-    <div class="two field"><div><label for="s-time">開始時間</label><input id="s-time" type="time" name="time" value="${esc(s.time)}"></div><div><label for="s-end">結束時間（選填）</label><input id="s-end" type="time" name="endTime" value="${esc(s.endTime)}"></div></div>
+    <div class="two field"><div><label for="s-time">開始時間</label>${timeBox("s-time","time",s.time,"開始時間")}</div><div><label for="s-end">結束時間（選填）</label>${timeBox("s-end","endTime",s.endTime,"結束時間")}</div></div>
     <div class="field"><label for="s-title">要做什麼</label><input id="s-title" name="title" required maxlength="100" value="${esc(s.title)}" placeholder="例如：淺草寺參拜"></div>
     <div class="field"><label for="s-place">地點</label><input id="s-place" name="place" maxlength="200" value="${esc(s.place)}" placeholder="例如：淺草寺"></div>
     <div class="field"><label for="s-nav">導航目標（選填）</label><input id="s-nav" name="nav" maxlength="500" value="${esc(s.nav)}" placeholder="地標、地址、座標或 Google 地圖連結" autocapitalize="off" spellcheck="false">
@@ -617,7 +647,7 @@ function editStop(id){
   },
   id?()=>{(s.photos||[]).forEach(pid=>del("photos",pid));del("stops",id)}:null,
   {onOpen:f=>{
-    drawThumbs(f);
+    drawThumbs(f);initTimeBoxes(f);
     f.querySelector("#pb-add").onclick=()=>{f.querySelector("#pb-on").value="1";f.querySelector("#pb-box").hidden=false;f.querySelector("#pb-add").hidden=true;f.querySelector("#pb-title").focus()};
     f.querySelector("#pb-rm").onclick=()=>{f.querySelector("#pb-on").value="";f.querySelector("#pb-box").hidden=true;f.querySelector("#pb-add").hidden=false;["#pb-title","#pb-place","#pb-note","#pb-nav"].forEach(k=>f.querySelector(k).value="")};
     f.querySelector("#s-thumbs").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
@@ -690,7 +720,7 @@ $("#createTrip").onclick=createTrip;
 $("#joinForm").onsubmit=e=>{e.preventDefault();const c=parseCode($("#joinInput").value);if(!c){toast("邀請碼格式不對，請貼上完整的連結或邀請碼");return}openTrip(c)};
 /* 往下滑時縮小標題（上下門檻不同，避免來回跳動） */
 let shrunk=false;
-addEventListener("scroll",()=>{const y=scrollY,room=document.documentElement.scrollHeight-innerHeight;const want=shrunk?y>12:(y>72&&room>170);if(want!==shrunk){shrunk=want;$("#passWrap").classList.toggle("shrunk",shrunk)}},{passive:true});
+addEventListener("scroll",()=>{const y=scrollY,room=document.documentElement.scrollHeight-innerHeight;const want=shrunk?y>12:(y>72&&room>130);if(want!==shrunk){shrunk=want;$("#passWrap").classList.toggle("shrunk",shrunk)}},{passive:true});
 addEventListener("online",()=>{online=true;render()});addEventListener("offline",()=>{online=false;render()});
 
 let tt;function toast(m){clearTimeout(tt);let el=$(".toast");if(!el){el=document.createElement("div");el.className="toast";el.setAttribute("role","status");document.body.appendChild(el)}el.textContent=m;tt=setTimeout(()=>el.remove(),2600)}
